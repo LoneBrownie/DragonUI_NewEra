@@ -32,12 +32,23 @@ Save gear sets in the Equipment Manager, then swap to one from chat or a macro:
 
 *(Note: `/equip` and `/equipset` are reserved built-in WotLK macro commands, hence `/gearset` / `/dnequip`.)*
 
+### Spellbook
+A standalone War-Within-style two-page spellbook, replacing the 3.3.5a `SpellBookFrame`:
+
+- **Card layout** — every learned spell as a Dragonflight-style card (icon + name + rank), flowing across a two-page evergreen book; a min/max button collapses it to a single page (↗ Expand / ↙ Condense).
+- **Category tabs** — General, your class (sectioned by spec), and a live Pet tab, styled to match the Character panel.
+- **Active vs passive** — active spells use the gold spellbook frame; passives use the dark square talent-node socket. Passive cells are click-inert (hover for tooltip only); pet cells ignore right-click.
+- **Whole-cell interaction** — click anywhere on a cell to cast, drag to place it on a bar, hover anywhere for the tooltip.
+- **Search + options** — filter spells by name; a cog menu toggles *Hide Passives* and *Show All Ranks* (off = highest rank only).
+
+Built natively for 3.3.5a's index-based spellbook API (a compat shim maps the Cataclysm `GetSpellBookItem*` family onto it).
+
 ## Roadmap
 
 Faithfully downporting the remaining NewEra panels to 3.3.5a:
 
 - [x] ~~**Character panel**~~ — *done* (paperdoll, stats sidebar, Skills / Honor / Reputation / Pet tabs, Titles, Equipment Manager + `/gearset`)
-- [ ] **Spellbook**
+- [x] ~~**Spellbook**~~ — *done* (two-page book, category tabs, active/passive frames, search + Hide Passives / Show All Ranks, single/double-page toggle)
 - [ ] **Talents**
 - [ ] **Quest Log**
 - [ ] **Merchant**

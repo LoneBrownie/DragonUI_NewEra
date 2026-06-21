@@ -21,6 +21,7 @@ compat\C_Item.lua
 compat\C_Spell.lua
 compat\C_Map.lua
 compat\C_EquipmentSet.lua
+compat\SpellBook.lua
 
 # --- core: downported NewEra Core chrome toolkit (owner: Core/Chrome Engineer) ---
 core\FrameUtil.lua
@@ -71,6 +72,11 @@ modules\character\Honor.lua
 modules\character\PetPaperDoll.lua
 modules\character\CloseButton.lua
 modules\character\EditModeRegister.lua
+
+# --- Spellbook (standalone War-Within-style book; learned spells) ---
+modules\spellbook\Assets.lua
+modules\spellbook\Window.lua
+modules\spellbook\Spellbook.lua
 
 # --- demo: Sprint-0 proof panel (owner: Core/Chrome Engineer) ---
 core\_HelloDemo.lua
