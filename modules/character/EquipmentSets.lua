@@ -492,5 +492,3 @@ ev:SetScript("OnEvent", function(_, event, ...)
   -- EQUIPMENT_SETS_CHANGED / PLAYER_EQUIPMENT_CHANGED / BAG_UPDATE.
   fireChanged()
 end)
-
-log("equipment-set backend = " .. (usingNative() and "NATIVE" or "CUSTOM"))

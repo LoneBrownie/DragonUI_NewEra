@@ -42,6 +42,19 @@ local ZOOM_MAX = 3.0           -- closest (zoom in)
 
 local DEFAULT_ALPHA = 0.5      -- retail ModelSceneControlFrame default alpha
 
+-- AdjustPointsOffset is a Dragonflight Region method; ClassicAPI adds it to FRAMES but not Textures,
+-- and these button icons are Textures (hence "attempt to call method 'AdjustPointsOffset' (a nil
+-- value)"). Use ClassicAPI's method when the region has it, else replicate it (shift every anchor
+-- point by dx,dy) — same logic ClassicAPI uses. Drives the 1px button-press nudge.
+local function adjustOffset(region, dx, dy)
+  if not (region and region.GetNumPoints) then return end
+  if region.AdjustPointsOffset then return region:AdjustPointsOffset(dx, dy) end
+  for i = 1, region:GetNumPoints() do
+    local point, relTo, relPoint, x, y = region:GetPoint(i)
+    if point then region:SetPoint(point, relTo, relPoint, (x or 0) + dx, (y or 0) + dy) end
+  end
+end
+
 -- ----------------------------------------------------------------------------
 -- Zoom helpers — 3.3.5a SetPosition(x,y,z): x is the depth (zoom) axis.
 -- ----------------------------------------------------------------------------
@@ -104,8 +117,8 @@ local function makeButton(parent, iconAtlas, onClick)
   hl:SetAlpha(0.4)
   btn:SetHighlightTexture(hl)
 
-  btn:SetScript("OnMouseDown", function(self) self.Icon:AdjustPointsOffset(1, -1) end)
-  btn:SetScript("OnMouseUp",   function(self) self.Icon:AdjustPointsOffset(-1, 1) end)
+  btn:SetScript("OnMouseDown", function(self) adjustOffset(self.Icon, 1, -1) end)
+  btn:SetScript("OnMouseUp",   function(self) adjustOffset(self.Icon, -1, 1) end)
   if onClick then btn:SetScript("OnClick", onClick) end
   return btn
 end
@@ -113,7 +126,7 @@ end
 -- Attach hold-to-zoom: OnMouseDown fires one step + installs an OnUpdate accumulator; OnMouseUp clears.
 local function attachZoomHold(btn, model, direction)
   btn:SetScript("OnMouseDown", function(self)
-    self.Icon:AdjustPointsOffset(1, -1)
+    adjustOffset(self.Icon, 1, -1)
     zoomModel(model, direction)
     self._acc = 0
     self:SetScript("OnUpdate", function(s, elapsed)
@@ -125,7 +138,7 @@ local function attachZoomHold(btn, model, direction)
     end)
   end)
   btn:SetScript("OnMouseUp", function(self)
-    self.Icon:AdjustPointsOffset(-1, 1)
+    adjustOffset(self.Icon, -1, 1)
     self:SetScript("OnUpdate", nil)
   end)
 end
@@ -136,7 +149,7 @@ end
 local function attachRotateHold(btn, model, dir)  -- dir: "L" or "R"
   local fn = (dir == "L") and _G.Model_RotateLeft or _G.Model_RotateRight
   btn:SetScript("OnMouseDown", function(self)
-    self.Icon:AdjustPointsOffset(1, -1)
+    adjustOffset(self.Icon, 1, -1)
     if fn then pcall(fn, model, ROTATE_REPEAT) end
     self._acc = 0
     self:SetScript("OnUpdate", function(s, elapsed)
@@ -149,7 +162,7 @@ local function attachRotateHold(btn, model, dir)  -- dir: "L" or "R"
     end)
   end)
   btn:SetScript("OnMouseUp", function(self)
-    self.Icon:AdjustPointsOffset(-1, 1)
+    adjustOffset(self.Icon, -1, 1)
     self:SetScript("OnUpdate", nil)
   end)
 end

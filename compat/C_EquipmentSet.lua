@@ -57,8 +57,6 @@ end
 
 local NATIVE = probeNative()
 NE.cap.equipmentSets = NATIVE
-log("native equipment-set API " .. (NATIVE and "AVAILABLE" or "absent/flaky") ..
-    " -> backend " .. (NATIVE and "NATIVE" or "CUSTOM"))
 
 -- If the native family isn't usable, there's nothing to map onto — the custom
 -- backend (EquipmentSets.lua) handles everything in Lua. Still publish an empty

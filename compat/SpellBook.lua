@@ -1,20 +1,15 @@
--- compat/SpellBook.lua — Cataclysm-era spellbook API shims for 3.3.5a.
+-- compat/SpellBook.lua — Cataclysm-era spellbook API shims !!!ClassicAPI does NOT cover.
 --
--- The retail/Classic GetSpellBookItem* family (and GameTooltip:SetSpellBookItem,
--- PickupSpellBookItem) was added in Cataclysm (4.0). NewEra (Classic Era 1.15, rebased on a
--- modern client) uses them; real 3.3.5a (WotLK) does NOT — it has the older INDEX+bookType API
--- (GetSpellName / GetSpellTexture / GetSpellLink / PickupSpell / GameTooltip:SetSpell). We map the
--- Cata names onto the 3.3.5a functions so the ported spellbook renderer runs unchanged.
+-- The retail/Classic GetSpellBookItem* family (and GameTooltip:SetSpellBookItem) was added in
+-- Cataclysm (4.0). NewEra (Classic Era 1.15, rebased on a modern client) uses them; real 3.3.5a
+-- (WotLK) does NOT — it has the older INDEX+bookType API (GetSpellName / GetSpellTexture /
+-- GetSpellLink / PickupSpell / GameTooltip:SetSpell).
 --
--- Each shim is defined ONLY when the Cata function is absent AND the 3.3.5a backer exists, so this
--- is a no-op on any client that already provides the modern API.
-
--- GetSpellBookItemName(slot, bookType) -> name, rank  (3.3.5a GetSpellName has the same shape)
-if not _G.GetSpellBookItemName and _G.GetSpellName then
-  function GetSpellBookItemName(slot, bookType)
-    return GetSpellName(slot, bookType)
-  end
-end
+-- !!!ClassicAPI is a HARD dependency and loads first; its C_SpellBook already aliases the GLOBALS
+-- GetSpellBookItemName (-> GetSpellName) and PickupSpellBookItem (-> PickupSpell). It does NOT
+-- provide GetSpellBookItemTexture, GetSpellBookItemInfo, or GameTooltip:SetSpellBookItem, so we map
+-- those three onto the 3.3.5a functions. Each is defined ONLY when absent, so this is a no-op on a
+-- client that already provides them.
 
 -- GetSpellBookItemTexture(slot, bookType) -> texture path
 if not _G.GetSpellBookItemTexture and _G.GetSpellTexture then
@@ -35,13 +30,6 @@ if not _G.GetSpellBookItemInfo then
       if link then spellID = tonumber(link:match("spell:(%d+)")) end
     end
     return "SPELL", spellID
-  end
-end
-
--- PickupSpellBookItem(slot, bookType) -> drag the spell to an action bar
-if not _G.PickupSpellBookItem and _G.PickupSpell then
-  function PickupSpellBookItem(slot, bookType)
-    return PickupSpell(slot, bookType)
   end
 end
 

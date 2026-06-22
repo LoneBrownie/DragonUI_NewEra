@@ -1,12 +1,12 @@
 -- DragonUI_NewEra/compat/C_Item.lua
--- Ensures the C_Item.* subset NewEra v1 uses exists.
+-- Fills the C_Item.* symbols !!!ClassicAPI does NOT define: GetItemSpell, GetItemQualityColor.
 --
--- DOWNPORT: Classic 1.15 namespaced item queries under C_Item. 3.3.5a uses top-level
--- GetItemInfo / GetItemSpell / GetItemQualityColor. v1 references:
---   C_Item.GetItemInfo, C_Item.GetItemSpell, C_Item.GetItemQualityColor
--- (all guarded by the source with `if C_Item and C_Item.Fn`). We forward to the
--- 3.3.5 globals. If ClassicAPI built C_Item we leave its richer methods and just fill
--- any of these three that are missing.
+-- DOWNPORT: Classic 1.15 namespaced item queries under C_Item. !!!ClassicAPI is a
+-- HARD dependency and loads first, providing GetItemInfo / GetItemInfoInstant /
+-- GetItemIconByID / GetItemCount and the ItemLocation family. It does NOT, however,
+-- define C_Item.GetItemSpell or C_Item.GetItemQualityColor — both of which v1 uses
+-- (ItemGrid reads GetItemSpell; quality colouring reads GetItemQualityColor). We
+-- forward those two to the 3.3.5a globals.
 
 local NE = DragonUI_NewEra
 if not NE or NE.disabled then return end
@@ -14,18 +14,12 @@ if not NE or NE.disabled then return end
 C_Item = C_Item or {}
 local C = C_Item
 
--- GetItemInfo(item) : identical signature/returns on 3.3.5 and Classic (name, link,
--- quality, ilvl, reqLevel, class, subclass, maxStack, equipLoc, texture, sellPrice).
-if not C.GetItemInfo then
-    C.GetItemInfo = GetItemInfo
-end
-
--- GetItemSpell(item) -> spellName, spellID  (same on 3.3.5).
+-- GetItemSpell(item) -> spellName, spellID  (same on 3.3.5; not provided by ClassicAPI).
 if not C.GetItemSpell then
     C.GetItemSpell = GetItemSpell
 end
 
--- GetItemQualityColor(quality) -> r, g, b, hex  (same on 3.3.5).
+-- GetItemQualityColor(quality) -> r, g, b, hex  (same on 3.3.5; not provided by ClassicAPI).
 if not C.GetItemQualityColor then
     if type(GetItemQualityColor) == "function" then
         C.GetItemQualityColor = GetItemQualityColor
@@ -39,12 +33,6 @@ if not C.GetItemQualityColor then
             return 1, 1, 1, "|cffffffff"
         end
     end
-end
-
--- GetItemIconByID(itemID) -> texture  (handy; v1 doesn't strictly need but ItemGrid
--- icons may). Forward to 3.3.5 GetItemIcon when present.
-if not C.GetItemIconByID and type(GetItemIcon) == "function" then
-    C.GetItemIconByID = GetItemIcon
 end
 
 NE.compat.item = true

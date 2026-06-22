@@ -3,19 +3,18 @@
 ## Notes: Dragonflight-style panels for 3.3.5a — downport of NewEra (Classic 1.15) onto DragonUI.
 ## Author: DragonUI_NewEra team
 ## Version: 0.1.0
-## Dependencies: DragonUI
-## OptionalDeps: !!!ClassicAPI, DragonUI_Options
+## Dependencies: DragonUI, !!!ClassicAPI
+## OptionalDeps: DragonUI_Options
 ## SavedVariables: DragonUI_NewEraDB
 
 bootstrap.lua
 
-# --- compat: modern-API shim layer (owner: API Bridge Engineer) ---
-# Loads FIRST after bootstrap. Each file ensures a modern global exists on 3.3.5a
-# (delegating to !!!ClassicAPI when present, else a vendored shim). See compat/COVERAGE.md.
+# --- compat: thin bridge over the REQUIRED !!!ClassicAPI (owner: API Bridge Engineer) ---
+# !!!ClassicAPI is a hard dependency and loads first (via its !!! prefix + Dependencies), so it
+# owns the modern globals (C_Timer/C_Texture/C_Container/C_Item/C_Spell/C_SpellBook/C_Map/Mixin/…).
+# These files now only fill the handful of symbols ClassicAPI does NOT provide; C_Timer/C_Texture
+# are fully ClassicAPI-owned and no longer shipped here. See compat/COVERAGE.md.
 compat\Compat.lua
-compat\Mixin.lua
-compat\C_Timer.lua
-compat\C_Texture.lua
 compat\C_Container.lua
 compat\C_Item.lua
 compat\C_Spell.lua
