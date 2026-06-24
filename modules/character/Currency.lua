@@ -190,6 +190,7 @@ local function updateScroll()
 
   local nRows = NUM_VISIBLE > 0 and NUM_VISIBLE or 1
   if FauxScrollFrame_Update then FauxScrollFrame_Update(scroll, total, nRows, ROW_HEIGHT) end
+  if NE.scrollbar and NE.scrollbar.CenterIfNoBar then NE.scrollbar.CenterIfNoBar(scroll, total > nRows) end
   local offset = (FauxScrollFrame_GetOffset and FauxScrollFrame_GetOffset(scroll)) or 0
 
   local rowW = content:GetWidth() or 200

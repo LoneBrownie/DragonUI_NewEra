@@ -88,6 +88,14 @@ local function petTabShown()
   return ok and v and true or false
 end
 
+-- Show the Currency tab only when the player actually has currency. GetCurrencyListSize() counts
+-- currencies AND their category headers; a char with zero currencies has an empty list, and headers
+-- only appear when they have currency children — so size > 0 ⟺ the player has some currency.
+local function currencyTabShown()
+  local ok, n = pcall(function() return GetCurrencyListSize and GetCurrencyListSize() end)
+  return ok and n and n > 0 and true or false
+end
+
 -- Left-pack the VISIBLE tabs: first at frame.BOTTOMLEFT(11,2) by TOPLEFT, rest chain TOPLEFT to the
 -- previous visible tab's TOPRIGHT with a 1px gap (NewEra rechainVisibleTabs). Tabs HANG BELOW the
 -- frame, tops aligned, so the active (42h) tab grows downward.
@@ -142,9 +150,11 @@ local function buildTabs()
       pcall(NE.tabs.ReskinClassicTab, name, {})
     end
 
-    -- Pet tab visibility (others always shown).
+    -- Conditional tabs: Pet (only with a pet UI), Currency (only with currency). Others always shown.
     if def.key == "Pet" then
       if petTabShown() then tab:Show() else tab:Hide() end
+    elseif def.key == "Currency" then
+      if currencyTabShown() then tab:Show() else tab:Hide() end
     end
 
     resizeTab(tab)
@@ -162,9 +172,13 @@ local function buildTabs()
     w:RegisterEvent("UNIT_PET")
     w:RegisterEvent("PET_UI_UPDATE")
     w:RegisterEvent("PLAYER_ENTERING_WORLD")
+    w:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+    w:RegisterEvent("KNOWN_CURRENCY_TYPES_UPDATE")
     w:SetScript("OnEvent", function()
       local petTab = CP._tabs["Pet"]
       if petTab then if petTabShown() then petTab:Show() else petTab:Hide() end end
+      local curTab = CP._tabs["Currency"]
+      if curTab then if currencyTabShown() then curTab:Show() else curTab:Hide() end end
       rechainVisibleTabs(CP.frame)
     end)
     CP._petTabWatcher = w

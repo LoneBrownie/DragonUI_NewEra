@@ -486,6 +486,25 @@ function NE.scrollbar.BuildCustom(scrollFrame, opts)
 end
 
 -- ============================================================================
+-- NE.scrollbar.CenterIfNoBar(scroll, needsBar) — the secondary-tab faux scroll frames are inset 10
+-- on the left and 24 on the right (the scrollbar gutter). When the list fits and NO scrollbar shows,
+-- that asymmetry leaves dead space on the right and the content reads left-biased. Balance the L/R
+-- insets to their average (17) so the content is centered; restore the gutter when a bar is needed.
+-- Same total width either way (10+24 == 17+17), so the rows keep their width and just shift. Host =
+-- scroll:GetParent(). NOTE: assumes the shared 10/-12 / -24/+10 inset values the secondary panes use.
+-- ============================================================================
+function NE.scrollbar.CenterIfNoBar(scroll, needsBar)
+  if not scroll then return end
+  local host = scroll:GetParent()
+  if not host then return end
+  local l, r = 10, 24
+  if not needsBar then local a = (l + r) / 2; l, r = a, a end
+  scroll:ClearAllPoints()
+  scroll:SetPoint("TOPLEFT", host, "TOPLEFT", l, -12)
+  scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -r, 10)
+end
+
+-- ============================================================================
 -- NE.scrollbar.BuildCustomPixel — DOWNPORT/REPORT: a PIXEL-SCROLL variant of BuildCustom for a
 -- plain ScrollFrame (NOT a FauxScrollFrame). The faithful-NewEra stats sidebar builds ALL rows at
 -- cumulative Y in one tall content frame and scrolls by PIXELS (NewEra used a retail WowScrollBox,

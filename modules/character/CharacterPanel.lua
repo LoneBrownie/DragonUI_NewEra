@@ -138,7 +138,7 @@ local function buildFrame()
   if CP.frame then return CP.frame end
 
   local f = CreateFrame("Frame", FRAME_NAME, UIParent)
-  f:SetSize(FRAME_W_COLLAPSED, FRAME_H)
+  f:SetSize(FRAME_W_EXPANDED, FRAME_H)   -- unified panel width (all tabs); see setSidebarExpanded
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
   f:SetFrameStrata("HIGH")
   f:SetToplevel(true)
@@ -305,13 +305,15 @@ local function setSidebarExpanded(expanded)
 
   CP._sidebarExpanded = expanded
 
+  -- UNIFIED WIDTH: every tab uses the full panel width (FRAME_W_EXPANDED) so the window never resizes
+  -- on tab switch and the 6-tab row always fits. Secondary (wide) tabs stretch their Inset/content to
+  -- fill it; paperdoll tabs keep their fixed-width left Inset (model/slots) with the equipment-manager
+  -- sidebar (Character) or open space (Pet) on the right.
   if wideTab then
-    -- Wide tab: frame = NewEra full-content width; Inset stretches to the frame edge; no sidebar.
-    f:SetWidth(WIDE_TAB_FRAME_W)
+    f:SetWidth(FRAME_W_EXPANDED)
     applyInsetWidthForTab(true)
   else
-    -- Narrow paperdoll/pet: 338 collapsed / 548 expanded; Inset fixed-width (model/slots stay put).
-    f:SetWidth(expanded and FRAME_W_EXPANDED or FRAME_W_COLLAPSED)
+    f:SetWidth(FRAME_W_EXPANDED)
     applyInsetWidthForTab(false)
   end
 

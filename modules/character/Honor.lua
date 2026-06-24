@@ -271,6 +271,7 @@ local function layout()
   local lineCount = math.ceil(total / SCROLL_STEP)
   local visLines  = NUM_VISIBLE > 0 and NUM_VISIBLE or 1
   if FauxScrollFrame_Update then FauxScrollFrame_Update(scroll, lineCount, visLines, SCROLL_STEP) end
+  if NE.scrollbar and NE.scrollbar.CenterIfNoBar then NE.scrollbar.CenterIfNoBar(scroll, lineCount > visLines) end
   local offsetLines = (FauxScrollFrame_GetOffset and FauxScrollFrame_GetOffset(scroll)) or 0
   local scrollPx = offsetLines * SCROLL_STEP
 
@@ -363,6 +364,7 @@ local function refresh()
     hideAllDynamic()
     if unavailLabel then unavailLabel:Show() end
     if FauxScrollFrame_Update then FauxScrollFrame_Update(scroll, 0, 1, SCROLL_STEP) end
+    if NE.scrollbar and NE.scrollbar.CenterIfNoBar then NE.scrollbar.CenterIfNoBar(scroll, false) end
     return
   end
 
