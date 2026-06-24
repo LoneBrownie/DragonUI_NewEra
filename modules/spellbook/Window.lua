@@ -32,12 +32,15 @@ SB.FRAME_W  = 1618
 SB.MIN_W    = 809
 SB.FRAME_H  = 883
 
--- WINDOW SCALE. NewEra renders the 1618x883 book at pixel-perfect effective scale 0.711 (same as
--- retail) — that IS NewEra's native, readable size. userScale 1.0 == pure pixel-perfect (1 logical
--- px = 1 physical px), so the book matches NewEra exactly AND its title bar matches our other
--- windows (Character panel), which also pin at 1.0. (An earlier 0.62 multiplier stacked ON TOP of
--- pixel-perfect, dropping us to ~0.44 effective — far smaller than NewEra, "too tiny to read".)
-SB.UI_SCALE = 1.0
+-- WINDOW SCALE. The book INHERITS UIParent's scale (so the in-game "Use UI Scale" slider controls
+-- its size like any normal frame) times SB.UI_SCALE as a per-window fine-tune. We deliberately do NOT
+-- lock it to a fixed fraction of the physical screen — that divided out UIParent's scale, so the UI
+-- Scale slider had no effect and the book read as huge. Lower SB.UI_SCALE → smaller book; raise → bigger.
+SB.UI_SCALE = 0.8
+local function applyWindowScale(f)
+  if f and f.SetScale then f:SetScale(SB.UI_SCALE or 1.0) end
+end
+SB.ApplyWindowScale = applyWindowScale
 SB.CHROME_L = 0
 SB.CHROME_T = 22
 SB.CHROME_R = 0
@@ -224,7 +227,7 @@ local function buildWindow()
 
   local f = CreateFrame("Frame", FRAME_NAME, UIParent)
   f:SetSize(SB.minimized and SB.MIN_W or SB.FRAME_W, SB.FRAME_H)
-  f:SetPoint("TOP", UIParent, "TOP", 0, -104)
+  f:SetPoint("TOP", UIParent, "TOP", 0, -55)
   -- Retail PlayerSpellsFrame: MEDIUM + toplevel (so the clicked window raises within its strata).
   f:SetFrameStrata("MEDIUM")
   f:SetToplevel(true)
@@ -311,16 +314,15 @@ local function buildWindow()
   -- The minimize/maximize button.
   guard("minimize", function() buildMinimize(f) end)
 
-  -- Pixel-perfect pin (1 logical px = 1 physical px) AT the book's reduced scale. PinPixelPerfect
-  -- takes a userScale multiplier, so we fold SB.UI_SCALE in here rather than fight it with a
-  -- separate SetScale — the whole book (frame + relative child cards/views) shrinks proportionally.
-  guard("pin", function()
-    if NE.FrameUtil and NE.FrameUtil.PinPixelPerfect then
-      NE.FrameUtil.PinPixelPerfect(f, SB.UI_SCALE or 1.0)
-    elseif f.SetScale then
-      f:SetScale(SB.UI_SCALE or 1.0)
-    end
-  end)
+  -- Window scale: fit the book to a fraction of the physical screen (see applyWindowScale). Best-
+  -- effort now, then re-applied on every open (the resolution query is reliable by then). Bypasses
+  -- PinPixelPerfect — for this big book a readable screen-fraction beats true pixel-perfect.
+  guard("windowScale", function() applyWindowScale(f) end)
+  f:HookScript("OnShow", function(self) applyWindowScale(self) end)
+
+  -- Re-assert the background path on every open: the renderer hardcodes the BLP path (to dodge the
+  -- Assets.lua registration race that caused black pages); this keeps it set as the GPU upload lands.
+  f:HookScript("OnShow", function() if SB._reapplyBg then SB._reapplyBg() end end)
 
   return f
 end

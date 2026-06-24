@@ -9,6 +9,12 @@
 
 bootstrap.lua
 
+# --- libs: embedded so features don't depend on other addons being loaded ---
+# LibCustomGlow provides the WeakAuras-style "Action Button Glow" (ants) used for the spellbook's
+# active-ability indicator. Embedded (not relying on WeakAuras); LibStub dedupes if another copy loads.
+Libs\LibStub\LibStub.lua
+Libs\LibCustomGlow-1.0\LibCustomGlow-1.0.xml
+
 # --- compat: thin bridge over the REQUIRED !!!ClassicAPI (owner: API Bridge Engineer) ---
 # !!!ClassicAPI is a hard dependency and loads first (via its !!! prefix + Dependencies), so it
 # owns the modern globals (C_Timer/C_Texture/C_Container/C_Item/C_Spell/C_SpellBook/C_Map/Mixin/…).

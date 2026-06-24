@@ -46,6 +46,14 @@ local BG_INSET_X       = 0
 local BG_TOP           = 0
 local HEADER_H         = 58
 
+-- Font sizes (px) — bumped from the template defaults so labels stay readable at the window's
+-- reduced scale. 0 leaves the FontObject default. Ceiling ~22 name / ~14 sub before CARD_H=60 overflows.
+local FONT_NAME_SIZE   = 18
+local FONT_SUB_SIZE    = 13
+local FONT_TAB_SIZE    = 12
+local FONT_TITLE_SIZE  = 14
+local FONT_PAGE_SIZE   = 14
+
 -- Category tabs — seated ON the wooden header, tops tucked just under the title bar (host top).
 -- Dimensions match the Character panel's tabs (h 36 inactive / 42 active, min-w 70, +24 text pad,
 -- 1px gap), applied in the Refresh chain loop + setTabArt.
@@ -83,6 +91,8 @@ SB.elements  = SB.elements or {}
 SB.search    = SB.search or ""
 SB.hidePassives = SB.hidePassives or false
 SB.showRanks    = SB.showRanks or false
+SB.showMounts   = SB.showMounts or false   -- cog option: show the Mounts tab
+if SB.showActiveGlow == nil then SB.showActiveGlow = true end   -- cog option: glow active spells (default ON)
 SB.refreshQueued = SB.refreshQueued or false
 
 -- The content root we parent everything to. Provided by the window agent as SB.Host().
@@ -106,6 +116,8 @@ local function loadFilterOpts()
   if type(o) == "table" then
     SB.hidePassives = o.hidePassives or false
     SB.showRanks    = o.showRanks or false
+    SB.showMounts   = o.showMounts or false
+    SB.showActiveGlow = (o.showActiveGlow ~= false)   -- default true (nil/true -> on; only explicit false -> off)
   end
 end
 local function saveOpts()
@@ -113,6 +125,8 @@ local function saveOpts()
   local o = _G.DragonUI_NewEraDB.spellbook or {}
   o.hidePassives = SB.hidePassives
   o.showRanks    = SB.showRanks
+  o.showMounts   = SB.showMounts
+  o.showActiveGlow = SB.showActiveGlow
   _G.DragonUI_NewEraDB.spellbook = o
 end
 SB._loadFilterOpts = loadFilterOpts
@@ -173,6 +187,14 @@ local function tryMask(parent, target, atlasName)
   return mask
 end
 
+-- LibCustomGlow — the glow lib WeakAuras embeds (ships IconAlert/IconAlertAnts). Resolved lazily
+-- (WeakAuras may load before/after us; first card render happens post-login so it's available). When
+-- present we use its ButtonGlow ("Action Button Glow" — the marching-ants proc glow) as the active
+-- indicator; when absent (WeakAuras disabled) we fall back to the native 3.3.5a AutoCastShine.
+local function getLCG()
+  return (LibStub and LibStub.GetLibrary and LibStub:GetLibrary("LibCustomGlow-1.0", true)) or nil
+end
+
 -- ============================================================================
 -- CARD FACTORY. One spell = one card (backplate + 40x40 secure icon button + name/subname).
 -- ============================================================================
@@ -210,45 +232,57 @@ local function createCard(i)
   b.Border = b:CreateTexture(nil, "OVERLAY", nil, 1)
   b.Border:SetAllPoints(b.IconSlot)
 
-  -- Pet auto-cast overlay: corners when autocast allowed, spinning ants when enabled.
+  -- "ACTIVE" overlay: the NATIVE 3.3.5a autocast SHINE — 16 sparkles (Interface\ItemSocketingFrame\
+  -- UI-ItemSockets) marching around the icon edges, exactly what the stock pet bar + spellbook use.
+  -- We build the sparkles ourselves (NO AutoCastShineTemplate → immune to addons like ezCollections
+  -- that reship UIPanelTemplates) but drive them with Blizzard's AutoCastShine_* helpers (core
+  -- UIParent.lua functions, untainted, never reshipped). Shown when a pet ability is autocasting or a
+  -- player spell's buff is up. ov:SetActive(bool) starts/stops it.
   local ov = CreateFrame("Frame", nil, b)
-  ov:SetPoint("TOPLEFT", b.Icon, "TOPLEFT", 0, -1.5)
-  ov:SetPoint("BOTTOMRIGHT", b.Icon, "BOTTOMRIGHT", -1.5, 1)
+  ov:SetPoint("TOPLEFT", b.IconSlot, "TOPLEFT", 0, 0)
+  ov:SetPoint("BOTTOMRIGHT", b.IconSlot, "BOTTOMRIGHT", 0, 0)
   ov:Hide()
-  local ants = ov:CreateTexture(nil, "OVERLAY", nil, 0)
-  local antsOk = NE.tex.SetAtlas(ants, "ui-hud-actionbar-petautocast-ants-2x", false)
-  ants:SetPoint("TOPLEFT",     ov, "TOPLEFT",     -10,  10)
-  ants:SetPoint("BOTTOMRIGHT", ov, "BOTTOMRIGHT",  10, -10)
-  ants:Hide()
-  if antsOk then tryMask(ov, ants, "spellbook-item-petautocast-mask") end
-  local acAnim, acRot
-  if ants.CreateAnimationGroup then
-    acAnim = ants:CreateAnimationGroup()
-    acAnim:SetLooping("REPEAT")
-    acRot = acAnim:CreateAnimation("Rotation")
-    if acRot then acRot:SetDegrees(-360); acRot:SetDuration(4); acRot:SetOrigin("CENTER", 0, 0) end
+  ov.sparkles = {}
+  for i = 1, 16 do
+    local s = ov:CreateTexture(nil, "OVERLAY")
+    s:SetTexture("Interface\\ItemSocketingFrame\\UI-ItemSockets")
+    s:SetTexCoord(0.3984375, 0.4453125, 0.40234375, 0.44921875)   -- the small sparkle on that sheet
+    s:SetBlendMode("ADD")
+    local sz = ({ 13, 10, 7, 4 })[((i - 1) % 4) + 1]   -- comet-trail sizes, per the native template
+    s:SetSize(sz, sz)
+    s:Hide()
+    ov.sparkles[i] = s
   end
-  local acCorners = ov:CreateTexture(nil, "OVERLAY", nil, 1)
-  NE.tex.SetAtlas(acCorners, "spellbook-item-petautocast-corners", false)
-  acCorners:SetAllPoints(ov)
-  ov.Shine, ov.ShineAnim, ov.Corners, ov.antsOk = ants, acAnim, acCorners, antsOk and true or false
-  function ov:ShowAutoCastEnabled(isEnabled)
-    self.autoCastEnabled = isEnabled
-    self:UpdateShineAnim()
-  end
-  function ov:UpdateShineAnim()
-    local shouldPlay = self.autoCastEnabled and self:IsShown() and self.antsOk
-    if not self.ShineAnim then
-      if self.Shine then if shouldPlay then self.Shine:Show() else self.Shine:Hide() end end
-      return
+  if AutoCastShine_OnUpdate then ov:SetScript("OnUpdate", AutoCastShine_OnUpdate) end  -- native fallback driver
+  ov.glowTarget = b.IconSlot   -- LibCustomGlow attaches its glow here (around the icon, not the whole cell)
+  function ov:SetActive(on)
+    local LCG = getLCG()
+    local tgt = self.glowTarget
+    if on then
+      if LCG and LCG.ButtonGlow_Start and tgt then
+        LCG.ButtonGlow_Start(tgt)                  -- the WeakAuras proc-glow "ants"
+        if tgt._ButtonGlow then tgt._ButtonGlow:Show() end   -- re-show a reused (instant-stopped) glow
+      else
+        self:Show()                                -- fallback: native autocast sparkles
+        if AutoCastShine_AutoCastStart then AutoCastShine_AutoCastStart(self) end
+      end
+    else
+      -- INSTANT stop (no fade): a page/category swap reuses this card for a DIFFERENT spell, so the
+      -- lib's normal fade-out would leave the glow on the wrong icon "for a moment". Stop the fade
+      -- animation and hide the glow frame now (it stays as _ButtonGlow and is reused on the next Start).
+      if tgt and tgt._ButtonGlow then
+        local g = tgt._ButtonGlow            -- capture BEFORE Stop (it may release + nil _ButtonGlow)
+        if LCG and LCG.ButtonGlow_Stop then LCG.ButtonGlow_Stop(tgt) end
+        if g then
+          if g.animOut and g.animOut.Stop then g.animOut:Stop() end
+          if g.animIn  and g.animIn.Stop  then g.animIn:Stop()  end
+          if g.Hide then g:Hide() end
+        end
+      end
+      if AutoCastShine_AutoCastStop then AutoCastShine_AutoCastStop(self) end
+      self:Hide()
     end
-    local playing = self.ShineAnim:IsPlaying()
-    if shouldPlay and not playing then self.ShineAnim:Play()
-    elseif not shouldPlay and playing then self.ShineAnim:Stop() end
-    if self.Shine then if shouldPlay then self.Shine:Show() else self.Shine:Hide() end end
   end
-  ov:SetScript("OnShow", ov.UpdateShineAnim)
-  ov:SetScript("OnHide", ov.UpdateShineAnim)
   b.AutoCastOverlay = ov
 
   b.IconHighlight = b:CreateTexture(nil, "OVERLAY", nil, 2)
@@ -288,6 +322,7 @@ local function createCard(i)
   if card.Name.SetWordWrap then card.Name:SetWordWrap(true) end
   if card.Name.SetMaxLines then card.Name:SetMaxLines(2) end
   card.Name:SetShadowColor(0, 0, 0, 0)
+  do local f, _, g = card.Name:GetFont(); if f and FONT_NAME_SIZE > 0 then card.Name:SetFont(f, FONT_NAME_SIZE, g) end end
 
   card.SubName = card:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   card.SubName:SetJustifyH("LEFT")
@@ -295,6 +330,7 @@ local function createCard(i)
   card.SubName:SetPoint("RIGHT", card.Name, "RIGHT")
   card.SubName:SetTextColor(0.82, 0.74, 0.55)
   card.SubName:SetShadowColor(0, 0, 0, 0)
+  do local f, _, g = card.SubName:GetFont(); if f and FONT_SUB_SIZE > 0 then card.SubName:SetFont(f, FONT_SUB_SIZE, g) end end
 
   -- tooltip + drag + hover. The hover (tooltip + cell highlight) covers the WHOLE cell, not just the
   -- 40x40 icon: the same handlers sit on both the card frame and the icon button. OnLeave guards on
@@ -345,8 +381,10 @@ local function createCard(i)
     end
   end)
 
-  -- Modified clicks: shift=link, ctrl=pickup. Blank the secure action under those modifiers so
-  -- the cast doesn't swallow them. (Right-click does NOTHING — pet autocast-toggle is disallowed.)
+  -- Modified clicks: shift=link, ctrl=pickup. Blank the secure action under those modifiers so the
+  -- cast doesn't swallow them. PLAIN right-click on a pet autocast ability is handled by a SECURE
+  -- macro (/petautocasttoggle) set in applyCardVisual — a direct ToggleSpellAutocast call from here
+  -- is a protected action and gets taint-blocked, so it MUST go through the secure environment.
   b:SetAttribute("shift-type*", "")
   b:SetAttribute("ctrl-type*", "")
   b:HookScript("OnClick", function(self, btn, down)
@@ -373,39 +411,92 @@ end
 -- ============================================================================
 -- BOOK BACKGROUND — evergreen panels stretched to fill the host halves.
 -- ============================================================================
+-- The old single 2048x1024 sheet (fdid 5834697) is SPLIT into one texture per region. This client
+-- can't reliably load a 2048-wide texture displayed at full size — it crashed on upload before, and
+-- otherwise renders BLACK (the dark bgFill showing through unloaded pages) until a fresh loading
+-- screen warms it. Each region is now its own ≤1024-class BGRA file (no mips → loads fully on first
+-- reference, so no streaming/black), displayed near-native = full quality. Each file is the whole
+-- region, so full 0..1 texcoords. Paths are hardcoded (immune to the Assets.lua registration race).
+local BG_DIR    = "Interface\\AddOns\\DragonUI_NewEra\\Textures\\Spellbook\\"
+local BG_LEFT   = BG_DIR .. "5834697-bg-left.blp"
+local BG_RIGHT  = BG_DIR .. "5834697-bg-right.blp"
+local BG_RIBBON = BG_DIR .. "5834697-bg-ribbon.blp"
+local BG_HEADER = BG_DIR .. "5834697-bg-header.blp"
+
+local function setBgTex(tex, file)
+  if not tex then return end
+  tex:SetTexture(file)
+  tex:SetTexCoord(0, 1, 0, 1)
+end
+
 local function buildBackground()
   local h = host()
-  if SB.bgFill or not h then return end
+  if SB.bgLeft or not h then return end
   local function track(t) SB.bgParts[#SB.bgParts + 1] = t; return t end
 
-  SB.bgFill = track(h:CreateTexture(nil, "BACKGROUND", nil, -3))
-  if SB.bgFill.SetColorTexture then SB.bgFill:SetColorTexture(0.03, 0.04, 0.03, 1)
-  else SB.bgFill:SetTexture(0.03, 0.04, 0.03, 1) end
-  SB.bgFill:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0)
-  SB.bgFill:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 0, 0)
+  -- NO solid-color bgFill here. A SetColorTexture / SetTexture(r,g,b,a) BACKGROUND fill (the old
+  -- SB.bgFill) intermittently corrupts this whole frame's texture batch on this client → the page
+  -- textures render black/green (diagnosed by mikki: deleting it fixes it). The window's own dark
+  -- bgTint already sits behind these, so nothing transparent shows through.
 
   SB.bgLeft = track(h:CreateTexture(nil, "BACKGROUND", nil, -2))
-  NE.tex.SetAtlas(SB.bgLeft, "spellbook-background-evergreen-left", false)
+  setBgTex(SB.bgLeft, BG_LEFT)
   SB.bgLeft:SetPoint("TOPLEFT", h, "TOPLEFT", BG_INSET_X, PAGES_TOP)
   SB.bgLeft:SetPoint("BOTTOMRIGHT", h, "BOTTOM", -1, PAGES_BOT)
 
   SB.bgRight = track(h:CreateTexture(nil, "BACKGROUND", nil, -2))
-  NE.tex.SetAtlas(SB.bgRight, "spellbook-background-evergreen-right", false)
+  setBgTex(SB.bgRight, BG_RIGHT)
   SB.bgRight:SetPoint("TOPLEFT", h, "TOP", 1, PAGES_TOP)
   SB.bgRight:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", -BG_INSET_X, PAGES_BOT)
 
-  SB.bgRibbon = track(h:CreateTexture(nil, "BACKGROUND", nil, -1))
-  NE.tex.SetAtlas(SB.bgRibbon, "spellbook-background-evergreen-ribbon", false)
-  SB.bgRibbon:SetWidth(102)
-  SB.bgRibbon:SetPoint("TOP", h, "TOP", 0, PAGES_TOP)
-  SB.bgRibbon:SetPoint("BOTTOM", h, "BOTTOM", 0, PAGES_BOT)
+  -- Center ribbon: ARTWORK (above the BACKGROUND page halves, below the card frames). Sized to its
+  -- NATIVE atlas aspect (102x557 ≈ 1:5.46) and anchored at the TOP only, so it hangs from the spine
+  -- with its forked tail ending partway down — it must NOT stretch to the book's bottom.
+  local RIBBON_W = 102
+  local RIBBON_X = 28   -- nudge right onto the spine: measured ~23px left of the seam at FRAME_W=1618
+  SB.bgRibbon = track(h:CreateTexture(nil, "OVERLAY", nil, -1))
+  setBgTex(SB.bgRibbon, BG_RIBBON)
+  SB.bgRibbon:SetSize(RIBBON_W, RIBBON_W * 557 / 102)
+  SB.bgRibbon:SetPoint("TOP", h, "TOP", RIBBON_X, PAGES_TOP)
+  if SB.minimized then SB.bgRibbon:Hide() else SB.bgRibbon:Show() end
 
   SB.bgHeader = track(h:CreateTexture(nil, "BORDER", nil, 0))
-  NE.tex.SetAtlas(SB.bgHeader, "spellbook-background-evergreen-header", false)
+  setBgTex(SB.bgHeader, BG_HEADER)
   SB.bgHeader:SetHeight(HEADER_H)
   SB.bgHeader:SetPoint("TOPLEFT", h, "TOPLEFT", 8, BG_TOP)
   SB.bgHeader:SetPoint("TOPRIGHT", h, "TOPRIGHT", -8, BG_TOP)
 end
+
+-- Re-assert the background path on every open (NO nil->path cycle — that would cancel an in-flight
+-- GPU upload and itself cause a black flash). Hooked from the window's OnShow.
+function SB._reapplyBg()
+  setBgTex(SB.bgLeft,   SB.minimized and BG_RIGHT or BG_LEFT)
+  setBgTex(SB.bgRight,  BG_RIGHT)
+  setBgTex(SB.bgRibbon, BG_RIBBON)
+  setBgTex(SB.bgHeader, BG_HEADER)
+end
+
+-- Hold ALL four bg region textures GPU-resident for the whole session via a permanent, SHOWN 1x1
+-- BACKGROUND frame (one texture each). Called at SB.Build (login), so they upload right after a
+-- /reload — BEFORE the book is first opened. Otherwise the textures live only on the hidden book
+-- frame (don't upload until shown), and /reload (which flushes the texture cache) leaves the book
+-- black until a full relog warms it. A shown frame forces the upload + keeps it from being evicted.
+local function prewarmBackgroundBLP()
+  if SB._bgPrewarmed then return end
+  SB._bgPrewarmed = true
+  local pw = CreateFrame("Frame", nil, UIParent)
+  pw:SetFrameStrata("BACKGROUND"); pw:SetFrameLevel(1)
+  pw:SetSize(1, 1)
+  pw:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
+  for _, file in ipairs({ BG_LEFT, BG_RIGHT, BG_RIBBON, BG_HEADER }) do
+    local t = pw:CreateTexture(nil, "BACKGROUND")
+    t:SetAllPoints(pw)
+    t:SetTexture(file)
+  end
+  pw:Show()
+  SB._bgPrewarm = pw
+end
+SB._prewarmBackgroundBLP = prewarmBackgroundBLP
 
 -- Sync the bg halves to the minimized state.
 local function applyBgWidth()
@@ -413,8 +504,7 @@ local function applyBgWidth()
   if not (h and SB.bgLeft) then return end
   if SB.bgRight  then if SB.minimized then SB.bgRight:Hide()  else SB.bgRight:Show()  end end
   if SB.bgRibbon then if SB.minimized then SB.bgRibbon:Hide() else SB.bgRibbon:Show() end end
-  NE.tex.SetAtlas(SB.bgLeft,
-    SB.minimized and "spellbook-background-evergreen-right" or "spellbook-background-evergreen-left", false)
+  setBgTex(SB.bgLeft, SB.minimized and BG_RIGHT or BG_LEFT)
   SB.bgLeft:ClearAllPoints()
   SB.bgLeft:SetPoint("TOPLEFT", h, "TOPLEFT", BG_INSET_X, PAGES_TOP)
   if SB.minimized then
@@ -507,6 +597,10 @@ local function buildCategories()
   if numPet and numPet > 0 then
     cats[#cats + 1] = { kind = "pet", label = PET or "Pet", numSlots = numPet }
   end
+  -- Mounts (cog-toggled): the player's summonable mounts via the 3.3.5a companion API.
+  if SB.showMounts and GetNumCompanions and (GetNumCompanions("MOUNT") or 0) > 0 then
+    cats[#cats + 1] = { kind = "mounts", label = MOUNTS or "Mounts" }
+  end
   SB.categories = cats
   SB.generalIdx = generalIdx
   return cats
@@ -516,6 +610,7 @@ end
 local function catSlotCount(cat)
   if not cat then return 0 end
   if cat.kind == "pet" then return cat.numSlots or 0 end
+  if cat.kind == "mounts" then return (GetNumCompanions and GetNumCompanions("MOUNT")) or 0 end
   local total = 0
   for _, sec in ipairs(cat.sections or {}) do total = total + (sec.numSlots or 0) end
   return total
@@ -557,6 +652,7 @@ local function buildPaging()
   p.label:SetPoint("LEFT", 0, 0)
   p.label:SetTextColor(0, 0, 0)
   p.label:SetShadowColor(0, 0, 0, 0)
+  do local f, _, g = p.label:GetFont(); if f and FONT_PAGE_SIZE > 0 then p.label:SetFont(f, FONT_PAGE_SIZE, g) end end
 
   local function pageButton(prefix, onClick)
     local b = CreateFrame("Button", nil, p)
@@ -636,6 +732,24 @@ local function addCards(els, offset, count, bookType)
   return #list
 end
 
+-- Mount cards from the 3.3.5a companion API. Each summons by CASTING its mount spell (the standard
+-- secure "spell" cast path in applyCardVisual), so no slot/bookType — just name/icon/spellID. Honors
+-- the search box. GetCompanionInfo("MOUNT", i) → creatureID, creatureName, spellID, icon, active.
+local function addMountCards(els)
+  if not (GetNumCompanions and GetCompanionInfo) then return end
+  local n = GetNumCompanions("MOUNT") or 0
+  for i = 1, n do
+    local _, creatureName, spellID, icon = GetCompanionInfo("MOUNT", i)
+    local name = (spellID and GetSpellInfo and GetSpellInfo(spellID)) or creatureName
+    if name and matchesSearch(name) then
+      els[#els + 1] = {
+        kind = "card", name = name, subName = "", spellID = spellID, icon = icon,
+        passive = false, mount = true, mountIndex = i,
+      }
+    end
+  end
+end
+
 local function buildElements()
   local cats = SB.categories or buildCategories()
   if SB.selected > #cats then SB.selected = 1 end
@@ -645,6 +759,8 @@ local function buildElements()
   if cat then
     if cat.kind == "pet" then
       addCards(els, 0, cat.numSlots, BOOKTYPE_PET_)
+    elseif cat.kind == "mounts" then
+      addMountCards(els)
     elseif cat.kind == "sectioned" then
       for _, sec in ipairs(cat.sections) do
         local headerIdx = #els + 1
@@ -718,16 +834,55 @@ local function createHeader(i)
   return h
 end
 
--- Pet autocast overlay state → reads legacy GetSpellAutocast.
-function SB.UpdateAutoCast(card)
+-- Is `name` an active buff on the player right now? Covers the spellbook examples (Demon Armor,
+-- Aspect of the Cheetah, …) — all of which show as player buffs. Plain query, no taint.
+local function playerHasBuff(name)
+  if not (name and name ~= "" and UnitBuff) then return false end
+  for i = 1, 40 do
+    local n = UnitBuff("player", i)
+    if not n then break end
+    if n == name then return true end
+  end
+  return false
+end
+
+-- Drive a card's "active" overlay: a PET ability with autocast ENABLED, or a PLAYER spell whose buff
+-- is currently up. Reads GetSpellAutocast (pet) / UnitBuff (player) — both plain queries, no taint.
+function SB.UpdateActiveOverlay(card)
+  if not card then return end
   local ov = card.Button and card.Button.AutoCastOverlay
   if not ov then return end
-  local allowed, enabled = false, false
-  if card.slot and card.bookType == BOOKTYPE_PET_ and GetSpellAutocast then
-    allowed, enabled = GetSpellAutocast(card.slot, card.bookType)
+  local active = false
+  if SB.showActiveGlow then   -- cog "Glow active spells" gates BOTH pet-autocast and active-buff glow
+    if card.slot and card.bookType == BOOKTYPE_PET_ and GetSpellAutocast then
+      local allowed, enabled = GetSpellAutocast(card.slot, card.bookType)
+      active = (allowed and enabled) and true or false
+    elseif card.spellName then
+      active = playerHasBuff(card.spellName)
+    end
   end
-  if allowed then ov:Show() else ov:Hide() end
-  ov:ShowAutoCastEnabled(enabled and true or false)
+  ov:SetActive(active)
+end
+SB.UpdateAutoCast = SB.UpdateActiveOverlay   -- back-compat alias
+
+-- Refresh every visible card's active overlay (cheap loop), so the glow tracks live aura/autocast
+-- state between full re-renders.
+function SB.UpdateActiveOverlays()
+  if not SB.cards then return end
+  for _, card in pairs(SB.cards) do
+    if card and card.IsShown and card:IsShown() then SB.UpdateActiveOverlay(card) end
+  end
+end
+
+-- Live watcher: buffs gained/lost + form changes flip the glow without a full re-render.
+do
+  local w = CreateFrame("Frame")
+  w:RegisterEvent("UNIT_AURA")
+  w:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+  w:SetScript("OnEvent", function(_, ev, unit)
+    if ev == "UNIT_AURA" and unit ~= "player" then return end
+    if SB.frame and SB.frame:IsShown() then SB.UpdateActiveOverlays() end
+  end)
 end
 
 -- ============================================================================
@@ -735,6 +890,7 @@ end
 -- ============================================================================
 local function applyCardVisual(card, e)
   card.slot, card.bookType, card.spellID = e.slot, e.bookType, e.spellID
+  card.spellName = e.name   -- for the "active buff" overlay check
   card.passive = e.passive and true or false   -- passive cells are click/drag-inert
   card.unlearned = false
   local b = card.Button
@@ -802,7 +958,9 @@ local function applyCardVisual(card, e)
     end
   end
 
-  -- secure cast attribute. Passive spells aren't castable; pet right-click toggles autocast.
+  -- secure cast attribute. Passive spells aren't castable. Pet RIGHT-click toggles autocast via a
+  -- SECURE macro (/petautocasttoggle <name>) — the only untainted way on 3.3.5a (a direct
+  -- ToggleSpellAutocast is protected → ADDON_ACTION_BLOCKED). Only autocast-capable spells get it.
   local isPetSlot = (e.bookType == BOOKTYPE_PET_) and e.slot ~= nil
   if not InCombatLockdown() then
     if e.passive then
@@ -810,10 +968,22 @@ local function applyCardVisual(card, e)
     else
       b:SetAttribute("type", "spell"); b:SetAttribute("spell", e.name)
     end
-    b:SetAttribute("type2", isPetSlot and "" or nil)
+    if isPetSlot then
+      local allowed = GetSpellAutocast and GetSpellAutocast(e.slot, e.bookType)
+      if allowed and e.name and e.name ~= "" then
+        b:SetAttribute("type2", "macro")
+        b:SetAttribute("macrotext2", "/petautocasttoggle " .. e.name)
+      else
+        b:SetAttribute("type2", "")          -- non-autocast pet ability: right-click does nothing
+        b:SetAttribute("macrotext2", nil)
+      end
+    else
+      b:SetAttribute("type2", nil)
+      b:SetAttribute("macrotext2", nil)
+    end
   end
 
-  SB.UpdateAutoCast(card)
+  SB.UpdateActiveOverlay(card)
 end
 
 -- ============================================================================
@@ -949,7 +1119,7 @@ end
 local function buildCogMenu(cog)
   if SB.cogMenu then return SB.cogMenu end
   local menu = CreateFrame("Frame", "NE_SpellBookCogMenu", cog)
-  menu:SetSize(180, 88)
+  menu:SetSize(180, 136)
   menu:SetFrameStrata("DIALOG")
   menu:SetPoint("TOPRIGHT", cog, "BOTTOMRIGHT", 0, -2)
   if menu.SetBackdrop then
@@ -988,11 +1158,30 @@ local function buildCogMenu(cog)
   menu.cbRanks = checkRow("Show All Ranks",
     function() return SB.showRanks end,
     function(v) SB.showRanks = v; saveOpts(); SB.page = 1; buildElements(); SB.RenderCards() end, -54)
+  -- Toggling the Mounts tab changes the category list, so re-run the full Refresh (rebuilds the tab
+  -- row + cards). Reset the auto-pick so we don't get stuck on a now-removed tab.
+  menu.cbMounts = checkRow("Show Mounts tab",
+    function() return SB.showMounts end,
+    function(v)
+      SB.showMounts = v; saveOpts(); SB.userPickedCategory = false; SB.page = 1
+      if SB.Refresh then SB.Refresh() end
+    end, -78)
+  -- Glow active spells (the WeakAuras ants on spells whose buff is currently up). Toggling re-evaluates
+  -- every visible card's overlay immediately (turning glows on/off without a full re-render).
+  menu.cbGlow = checkRow("Glow active spells",
+    function() return SB.showActiveGlow end,
+    function(v) SB.showActiveGlow = v; saveOpts(); if SB.UpdateActiveOverlays then SB.UpdateActiveOverlays() end end, -102)
 
   menu:SetScript("OnShow", function(self)
     if self.cbPassives and self.cbPassives._sync then self.cbPassives._sync() end
     if self.cbRanks and self.cbRanks._sync then self.cbRanks._sync() end
+    if self.cbMounts and self.cbMounts._sync then self.cbMounts._sync() end
+    if self.cbGlow and self.cbGlow._sync then self.cbGlow._sync() end
   end)
+  -- Close the popup whenever the spellbook closes, so reopening the book never shows a left-open cog.
+  if SB.frame and SB.frame.HookScript then
+    SB.frame:HookScript("OnHide", function() menu:Hide() end)
+  end
   SB.cogMenu = menu
   return menu
 end
@@ -1044,6 +1233,7 @@ function SB.Build()
   buildPaging()
   buildSearch()
   buildCog()
+  prewarmBackgroundBLP()   -- warm the bg textures NOW (login), before the book is first opened
 end
 
 function SB.Refresh()
@@ -1054,6 +1244,19 @@ function SB.Refresh()
   buildSearch()
   buildCog()
   applyBgWidth()
+  prewarmBackgroundBLP()   -- idempotent (guarded); ensures warming even if Build's call was early
+
+  -- Title font size. The chrome stores the title FontString as frame._neTitle (PanelChrome.SetTitle),
+  -- inheriting GameFontNormal (~12pt) by default; bump it to match the resized window.
+  if FONT_TITLE_SIZE > 0 and SB.frame then
+    local titleFs = SB.frame._neTitle
+                 or (SB.frame.TitleContainer and SB.frame.TitleContainer.TitleText)
+                 or SB.frame.Title
+    if titleFs and titleFs.GetFont then
+      local f, _, g = titleFs:GetFont()
+      if f then titleFs:SetFont(f, FONT_TITLE_SIZE, g) end
+    end
+  end
 
   local cats = buildCategories()
   if SB.selected > #cats then SB.selected = 1 end
@@ -1072,7 +1275,11 @@ function SB.Refresh()
     -- Width to text, same as the Character panel's resizeTab (reset → measure → max(min, w+pad)).
     local txt = _G[t:GetName() .. "Text"]
     local tw = 0
-    if txt then txt:SetWidth(0); tw = txt:GetWidth() or 0 end
+    if txt then
+      txt:SetWidth(0)
+      do local f, _, g = txt:GetFont(); if f and FONT_TAB_SIZE > 0 then txt:SetFont(f, FONT_TAB_SIZE, g) end end
+      tw = txt:GetWidth() or 0
+    end
     t:SetWidth(math.max(TAB_MIN_W, math.floor(tw + TAB_TEXT_PAD)))
     t:ClearAllPoints()
     if prev then
