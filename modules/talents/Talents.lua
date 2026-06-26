@@ -286,8 +286,8 @@ local function CreateNode(parent)
     -- VERIFY: ALL shapes use the SQUARE art family on 3.3.5a (no round icon mask). "circle" (active)
     -- still routes here as square art — NodeData.lua decides which gray/colored frame stem to use.
     local base = big and (NODE + 48) or NODE                     -- final talent: large 84px footprint
-    if shape == "capstonesquare" then
-      base = CAPSTONE_SQUARE_SIZE
+    if shape == "capstonesquare" or shape == "capstone" then
+      base = CAPSTONE_SQUARE_SIZE                                -- both deepest-tier nodes use the square capstone size
     else
       base = base * SQUARE_NODE_FIT                              -- scale the whole square node (56/64)
     end
