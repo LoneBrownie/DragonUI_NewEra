@@ -92,6 +92,7 @@ SB.search    = SB.search or ""
 SB.hidePassives = SB.hidePassives or false
 SB.showRanks    = SB.showRanks or false
 SB.showMounts   = SB.showMounts or false   -- cog option: show the Mounts tab
+SB.showCompanions = SB.showCompanions or false   -- cog option: show the Companions (vanity pets) tab
 if SB.showActiveGlow == nil then SB.showActiveGlow = true end   -- cog option: glow active spells (default ON)
 SB.refreshQueued = SB.refreshQueued or false
 
@@ -117,6 +118,7 @@ local function loadFilterOpts()
     SB.hidePassives = o.hidePassives or false
     SB.showRanks    = o.showRanks or false
     SB.showMounts   = o.showMounts or false
+    SB.showCompanions = o.showCompanions or false
     SB.showActiveGlow = (o.showActiveGlow ~= false)   -- default true (nil/true -> on; only explicit false -> off)
   end
 end
@@ -126,6 +128,7 @@ local function saveOpts()
   o.hidePassives = SB.hidePassives
   o.showRanks    = SB.showRanks
   o.showMounts   = SB.showMounts
+  o.showCompanions = SB.showCompanions
   o.showActiveGlow = SB.showActiveGlow
   _G.DragonUI_NewEraDB.spellbook = o
 end
@@ -601,6 +604,10 @@ local function buildCategories()
   if SB.showMounts and GetNumCompanions and (GetNumCompanions("MOUNT") or 0) > 0 then
     cats[#cats + 1] = { kind = "mounts", label = MOUNTS or "Mounts" }
   end
+  -- Companions / vanity pets (cog-toggled): the "CRITTER" companion list (parallel to Mounts).
+  if SB.showCompanions and GetNumCompanions and (GetNumCompanions("CRITTER") or 0) > 0 then
+    cats[#cats + 1] = { kind = "companions", label = COMPANIONS or "Companions" }
+  end
   SB.categories = cats
   SB.generalIdx = generalIdx
   return cats
@@ -611,6 +618,7 @@ local function catSlotCount(cat)
   if not cat then return 0 end
   if cat.kind == "pet" then return cat.numSlots or 0 end
   if cat.kind == "mounts" then return (GetNumCompanions and GetNumCompanions("MOUNT")) or 0 end
+  if cat.kind == "companions" then return (GetNumCompanions and GetNumCompanions("CRITTER")) or 0 end
   local total = 0
   for _, sec in ipairs(cat.sections or {}) do total = total + (sec.numSlots or 0) end
   return total
@@ -745,6 +753,25 @@ local function addMountCards(els)
       els[#els + 1] = {
         kind = "card", name = name, subName = "", spellID = spellID, icon = icon,
         passive = false, mount = true, mountIndex = i,
+        companionType = "MOUNT", companionIndex = i,   -- for the "active" glow (riding == active)
+      }
+    end
+  end
+end
+
+-- Companion / vanity-pet cards (the "CRITTER" companion type). Identical to mounts: each summons by
+-- CASTING its companion spell (so just name/icon/spellID — the standard secure "spell" cast path).
+local function addCompanionCards(els)
+  if not (GetNumCompanions and GetCompanionInfo) then return end
+  local n = GetNumCompanions("CRITTER") or 0
+  for i = 1, n do
+    local _, creatureName, spellID, icon = GetCompanionInfo("CRITTER", i)
+    local name = (spellID and GetSpellInfo and GetSpellInfo(spellID)) or creatureName
+    if name and matchesSearch(name) then
+      els[#els + 1] = {
+        kind = "card", name = name, subName = "", spellID = spellID, icon = icon,
+        passive = false, companion = true, companionIndex = i,
+        companionType = "CRITTER",   -- for the "active" glow (currently-summoned companion == active)
       }
     end
   end
@@ -761,6 +788,8 @@ local function buildElements()
       addCards(els, 0, cat.numSlots, BOOKTYPE_PET_)
     elseif cat.kind == "mounts" then
       addMountCards(els)
+    elseif cat.kind == "companions" then
+      addCompanionCards(els)
     elseif cat.kind == "sectioned" then
       for _, sec in ipairs(cat.sections) do
         local headerIdx = #els + 1
@@ -857,6 +886,10 @@ function SB.UpdateActiveOverlay(card)
     if card.slot and card.bookType == BOOKTYPE_PET_ and GetSpellAutocast then
       local allowed, enabled = GetSpellAutocast(card.slot, card.bookType)
       active = (allowed and enabled) and true or false
+    elseif card.companionType and card.companionIndex and GetCompanionInfo then
+      -- Mount currently being ridden / companion currently summoned: the 5th return is the active flag.
+      local _, _, _, _, summoned = GetCompanionInfo(card.companionType, card.companionIndex)
+      active = summoned and true or false
     elseif card.spellName then
       active = playerHasBuff(card.spellName)
     end
@@ -879,6 +912,7 @@ do
   local w = CreateFrame("Frame")
   w:RegisterEvent("UNIT_AURA")
   w:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+  w:RegisterEvent("COMPANION_UPDATE")   -- summon/dismiss a mount or companion flips its card glow
   w:SetScript("OnEvent", function(_, ev, unit)
     if ev == "UNIT_AURA" and unit ~= "player" then return end
     if SB.frame and SB.frame:IsShown() then SB.UpdateActiveOverlays() end
@@ -891,6 +925,7 @@ end
 local function applyCardVisual(card, e)
   card.slot, card.bookType, card.spellID = e.slot, e.bookType, e.spellID
   card.spellName = e.name   -- for the "active buff" overlay check
+  card.companionType, card.companionIndex = e.companionType, e.companionIndex   -- mount/companion active glow
   card.passive = e.passive and true or false   -- passive cells are click/drag-inert
   card.unlearned = false
   local b = card.Button
@@ -1119,7 +1154,7 @@ end
 local function buildCogMenu(cog)
   if SB.cogMenu then return SB.cogMenu end
   local menu = CreateFrame("Frame", "NE_SpellBookCogMenu", cog)
-  menu:SetSize(180, 136)
+  menu:SetSize(180, 160)
   menu:SetFrameStrata("DIALOG")
   menu:SetPoint("TOPRIGHT", cog, "BOTTOMRIGHT", 0, -2)
   if menu.SetBackdrop then
@@ -1166,16 +1201,24 @@ local function buildCogMenu(cog)
       SB.showMounts = v; saveOpts(); SB.userPickedCategory = false; SB.page = 1
       if SB.Refresh then SB.Refresh() end
     end, -78)
+  -- Companions tab (vanity pets) — same as Mounts: toggling changes the category list, so full Refresh.
+  menu.cbCompanions = checkRow("Show Companions tab",
+    function() return SB.showCompanions end,
+    function(v)
+      SB.showCompanions = v; saveOpts(); SB.userPickedCategory = false; SB.page = 1
+      if SB.Refresh then SB.Refresh() end
+    end, -102)
   -- Glow active spells (the WeakAuras ants on spells whose buff is currently up). Toggling re-evaluates
   -- every visible card's overlay immediately (turning glows on/off without a full re-render).
   menu.cbGlow = checkRow("Glow active spells",
     function() return SB.showActiveGlow end,
-    function(v) SB.showActiveGlow = v; saveOpts(); if SB.UpdateActiveOverlays then SB.UpdateActiveOverlays() end end, -102)
+    function(v) SB.showActiveGlow = v; saveOpts(); if SB.UpdateActiveOverlays then SB.UpdateActiveOverlays() end end, -126)
 
   menu:SetScript("OnShow", function(self)
     if self.cbPassives and self.cbPassives._sync then self.cbPassives._sync() end
     if self.cbRanks and self.cbRanks._sync then self.cbRanks._sync() end
     if self.cbMounts and self.cbMounts._sync then self.cbMounts._sync() end
+    if self.cbCompanions and self.cbCompanions._sync then self.cbCompanions._sync() end
     if self.cbGlow and self.cbGlow._sync then self.cbGlow._sync() end
   end)
   -- Close the popup whenever the spellbook closes, so reopening the book never shows a left-open cog.
