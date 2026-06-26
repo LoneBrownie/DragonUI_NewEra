@@ -70,7 +70,11 @@ local TREE_Y_SHIFT    = 16     -- small drop below the title band
 local COLS       = 4           -- Era NUM_TALENT_COLUMNS (WotLK keeps 4 columns)
 local TIERS      = 11          -- WotLK deepest tier (51-pt talent; vanilla was 7)
 local TREE_GAP   = 132         -- gap between trees (tuned so the rightmost focal zone stays ~246px)
-local HEADER_H   = 68          -- per-tree header band (big name + points + whitespace)
+-- Per-tree header band (offsets tier 1 down from the tree top; the spec name is auto-centred in the
+-- band above tier 1 by HEADER_CENTER_Y). Tuned so top->name, name->tier1, tier10->tier11 and
+-- tier11->bottom are all ~equal (~28px). VERIFY against a screenshot — depends on the name height
+-- and the exact top content edge; nudge this (name gaps) + TALENT_H (bottom gap) to fine-tune.
+local HEADER_H   = 28
 local BOTTOMBAR_H= 80
 local INSET_L, INSET_R, INSET_T, INSET_B = 110, 84, 48, 20 -- content layout margin (trees/bar)
 -- Content-fill insets. The bg must tuck fully UNDER the nineslice (which draws on OVERLAY over it)
@@ -98,7 +102,10 @@ local CONTENT_H = HEADER_H + TREE_H               -- 68 + 476 = 544
 --   = 420 tree + a 55px capstone drop; the WotLK 11-tier tree at the tighter pitch lands the same
 --   ~476 tree height, so the 750 frame budget holds.)
 local TALENT_W = 1214
-local TALENT_H = 750
+-- Height tuned so the gap below the deepest tier (tier11 -> top of the bottom bar) matches the other
+-- ~28px gaps. = treeOffset(64) + NODE/2 + HEADER_H + 10*PITCH_Y + LAST_TIER_EXTRA + capstone half(28)
+-- + GAP(28) + BOTTOMBAR_H(80) ≈ 714. VERIFY/tune with HEADER_H.
+local TALENT_H = 714
 -- Default top offset from UIParent TOP (this frame's own scaled units). Negative = below the top.
 local FRAME_TOP_OFFSET = -55
 

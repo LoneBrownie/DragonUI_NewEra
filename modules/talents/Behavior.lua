@@ -351,12 +351,7 @@ local function drawEdge(tf, sTier, sCol, dTier, dCol, color)
     d:SetVertexColor(color[1], color[2], color[3], color[4])
     dots[#dots + 1] = d
   end
-  -- static "head" pip just inside the dependent node (marks the target / direction of travel)
-  local head = tf:AcquireDot()
-  head:SetSize(HEAD_SIZE, HEAD_SIZE)
-  head:SetVertexColor(color[1], color[2], color[3], color[4])
-  head:ClearAllPoints()
-  head:SetPoint("CENTER", tf, "TOPLEFT", sx + ux * (dist - half), sy + uy * (dist - half))
+  -- (no static "head" pip — just the marching dots flowing into the dependent node)
   local edge = { tf = tf, x0 = x0, y0 = y0, ux = ux, uy = uy, span = span, gap = gap, dots = dots }
   tf._edgeList[#tf._edgeList + 1] = edge
   positionEdge(edge, T._edgePhase or 0)   -- initial placement (driver takes over next frame)
