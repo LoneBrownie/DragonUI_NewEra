@@ -177,16 +177,14 @@ end
 
 -- shadow atlas per shape (square/circle have their own; capstone reuses square shadow).
 local function shadowAtlas(shape)
-  if shape == "circle" then return "talents-node-circle-shadow" end
-  return "talents-node-square-shadow"
+  return "talents-node-square-shadow"   -- circle maps to square art on 3.3.5a; capstone reuses this too
 end
 
 -- selectable-glow atlas per shape. square/circle = "<stem>-greenglow"; the apex (capstone) glow is
 -- named "talents-node-apex-large-glow" (no -green prefix).
 local function glowAtlas(shape)
   if shape == "capstone" then return "talents-node-apex-large-glow" end
-  if shape == "circle" then return "talents-node-circle-greenglow" end
-  return "talents-node-square-greenglow"
+  return "talents-node-square-greenglow"   -- square + circle both use the square glow on 3.3.5a
 end
 
 -- Hover-border alpha per state (full-bright on Normal/Selectable/Maxed; dim 0.4 otherwise).

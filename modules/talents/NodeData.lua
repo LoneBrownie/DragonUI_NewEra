@@ -72,7 +72,7 @@ end
 --   capstone -> "talents-node-apex-large"   (active variant: apex-active-large)
 T.SHAPE_ATLAS = {
   square         = "talents-node-square",
-  circle         = "talents-node-circle",
+  circle         = "talents-node-square",   -- 3.3.5a: no round icon mask, so active talents use the SQUARE frame too
   capstone       = "talents-node-apex-large",
   capstonesquare = "talents-node-square",   -- passive deep-tier talent: square art, capstone scale
 }
