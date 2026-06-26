@@ -164,14 +164,21 @@ local function buildFrame()
     tinsert(UISpecialFrames, FRAME_NAME)
   end
 
-  -- Draggable title band so the frame can be repositioned (DFUIC pattern).
+  -- Draggable title band so the frame can be repositioned (DFUIC pattern). Position persists
+  -- account-wide across /reload + sessions (and resets to the default centre if the screen
+  -- resolution changes, so a saved spot can never strand the window off-screen).
   local drag = CreateFrame("Button", nil, f)
   drag:SetPoint("TOPLEFT", 60, -2)
   drag:SetPoint("TOPRIGHT", -30, -2)
   drag:SetHeight(28)
-  drag:RegisterForDrag("LeftButton")
-  drag:SetScript("OnDragStart", function() f:StartMoving() end)
-  drag:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+  if NE.FrameUtil and NE.FrameUtil.PersistWindowPosition then
+    NE.FrameUtil.PersistWindowPosition(f, "character",
+      { point = "CENTER", relPoint = "CENTER", x = 0, y = 60 }, drag)
+  else
+    drag:RegisterForDrag("LeftButton")
+    drag:SetScript("OnDragStart", function() f:StartMoving() end)
+    drag:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+  end
 
   -- DF portrait-frame chrome (nineslice + Rock bg + title). noPortrait=true: PanelChrome's default
   -- portrait fill is the PLAYER portrait + a watcher that re-asserts it on UNIT_PORTRAIT_UPDATE,

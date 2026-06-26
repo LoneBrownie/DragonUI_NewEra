@@ -220,6 +220,122 @@ function NE.FrameUtil.WirePanelSounds(frame, openKit, closeKit, fallbackOpen, fa
   frame._neSoundWatcher = w
 end
 
+-- Registry of persisted windows: { { frame, key, default }, ... }. Used by the resolution watcher.
+NE.FrameUtil._persisted = NE.FrameUtil._persisted or {}
+
+-- A signature for the current screen resolution. A real resolution change moves this; a normal
+-- login does not (so we never wipe saved positions just because the player logged in).
+local function currentResSig()
+  local r = (GetCVar and GetCVar("gxResolution")) or ""
+  if r == "" then
+    r = tostring(math.floor((GetScreenWidth()  or 0) + 0.5)) .. "x"
+     .. tostring(math.floor((GetScreenHeight() or 0) + 0.5))
+  end
+  return r
+end
+
+-- Forget every saved position and snap each window back to its default anchor.
+local function resetAllToDefault()
+  local db = NE.db
+  for _, e in ipairs(NE.FrameUtil._persisted) do
+    if db and db.windowPos then db.windowPos[e.key] = nil end
+    NE.FrameUtil.RestoreWindowPosition(e.frame, e.key, e.default)   -- no saved entry -> uses default
+  end
+end
+
+-- One shared watcher: when the screen RESOLUTION actually changes, reset all persisted windows to
+-- their defaults. A saved spot from a larger/wider resolution could otherwise land off-screen and
+-- become unreachable, so we deliberately drop it rather than try to nudge it back.
+local function ensureResetWatcher()
+  if NE.FrameUtil._resetWatcher then return end
+  local w = CreateFrame("Frame")
+  w:RegisterEvent("DISPLAY_SIZE_CHANGED")   -- fires on a resolution change (also UIParent resize)
+  w:SetScript("OnEvent", function()
+    local db = NE.db
+    if not db then return end
+    local sig = currentResSig()
+    if db.lastRes and db.lastRes ~= sig then
+      resetAllToDefault()
+    end
+    db.lastRes = sig
+  end)
+  NE.FrameUtil._resetWatcher = w
+end
+
+-- Drag-to-move WITH persistence. Makes `frame` movable and remembers where the user drops it,
+-- account-wide in NE.db.windowPos[key] = { point, relPoint, x, y }, restoring it next session.
+-- `default` (optional) = { point, relPoint, x, y } applied when nothing is saved yet AND the spot
+-- the windows reset to when the screen resolution changes.
+-- `dragHandle` (optional) = the region that initiates the drag (a title band etc.); defaults to the
+-- frame itself. Either way it is `frame` that moves and whose position is saved.
+-- Anchors are always relative to UIParent (these are top-level windows), so a saved position is
+-- stable regardless of what the frame happened to be anchored to at drag time.
+function NE.FrameUtil.PersistWindowPosition(frame, key, default, dragHandle)
+  if not frame or not key then return end
+  local handle = dragHandle or frame
+
+  local function store()
+    local db = NE.db
+    if not db then return nil end
+    db.windowPos = db.windowPos or {}
+    db.windowPos[key] = db.windowPos[key] or {}
+    return db.windowPos[key]
+  end
+
+  frame:SetMovable(true)
+  frame:SetClampedToScreen(true)
+  handle:EnableMouse(true)
+  handle:RegisterForDrag("LeftButton")
+  handle:SetScript("OnDragStart", function() frame:StartMoving() end)
+  handle:SetScript("OnDragStop", function()
+    frame:StopMovingOrSizing()
+    local t = store()
+    if not t then return end
+    local p, _, rp, x, y = frame:GetPoint(1)
+    if p then
+      t.point, t.relPoint, t.x, t.y = p, rp or p, x or 0, y or 0
+    end
+  end)
+
+  table.insert(NE.FrameUtil._persisted, { frame = frame, key = key, default = default })
+
+  -- Seed / check the resolution baseline. Covers a resolution change made BEFORE this window was
+  -- first opened this session (the live watcher only catches changes after a window exists): if the
+  -- resolution differs from what we last saw, drop saved spots so nothing restores off-screen.
+  if NE.db then
+    local sig = currentResSig()
+    if NE.db.lastRes == nil then
+      NE.db.lastRes = sig
+    elseif NE.db.lastRes ~= sig then
+      resetAllToDefault()
+      NE.db.lastRes = sig
+    end
+  end
+  ensureResetWatcher()
+
+  -- Apply the saved position now (or the supplied default).
+  NE.FrameUtil.RestoreWindowPosition(frame, key, default)
+end
+
+-- Re-anchor `frame` to its saved position (set via PersistWindowPosition), falling back to
+-- `default` when nothing is stored. Safe to call repeatedly (e.g. on each OnShow).
+-- Returns true if a SAVED position was applied (false if it used the default / did nothing).
+function NE.FrameUtil.RestoreWindowPosition(frame, key, default)
+  if not frame or not key then return false end
+  local db = NE.db
+  local t = db and db.windowPos and db.windowPos[key]
+  if t and t.point then
+    frame:ClearAllPoints()
+    frame:SetPoint(t.point, UIParent, t.relPoint or t.point, t.x or 0, t.y or 0)
+    return true
+  end
+  if default and default.point then
+    frame:ClearAllPoints()
+    frame:SetPoint(default.point, UIParent, default.relPoint or default.point, default.x or 0, default.y or 0)
+  end
+  return false
+end
+
 -- Money text — the gold/silver/copper coin-icon string for a copper amount.
 NE.money = NE.money or {}
 function NE.money.Text(copper, empty)

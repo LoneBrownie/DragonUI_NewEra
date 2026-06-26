@@ -38,9 +38,9 @@ end
 -- Simple registry the QA harness reads: panels append { name=, frame=, open=, close= }.
 NE.qa = NE.qa or { modules = {} }
 
--- SavedVariables. Our OWN db holds panel-internal per-char state ONLY
--- (equipment sets, talent prefs). Panel ENABLE flags and POSITIONS live in
--- DragonUI (DragonUIDB) via ModuleRegistry + MoversSystem for a unified UX.
+-- SavedVariables. Our OWN db holds panel-internal per-char state (equipment sets, talent prefs)
+-- plus account-wide window positions (db.windowPos[key], see FrameUtil.PersistWindowPosition).
+-- Panel ENABLE flags live in DragonUI (DragonUIDB) via profile.newera for a unified UX.
 local CURRENT_SCHEMA = 1
 NE.migrations = NE.migrations or {}
 NE.migrations[1] = function(db)

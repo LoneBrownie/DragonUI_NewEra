@@ -480,12 +480,19 @@ local function buildWindow()
   -- Retail PlayerSpellsFrame: MEDIUM + toplevel (so the clicked window raises within its strata).
   f:SetFrameStrata("MEDIUM")
   f:SetToplevel(true)
-  f:EnableMouse(true)
-  f:SetMovable(true)
-  f:SetClampedToScreen(true)
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  -- Drag-to-move WITH saved position (persists account-wide across /reload + sessions, like the
+  -- spellbook). Falls back to the default TOP anchor on first use.
+  if NE.FrameUtil and NE.FrameUtil.PersistWindowPosition then
+    NE.FrameUtil.PersistWindowPosition(f, "talents",
+      { point = "TOP", relPoint = "TOP", x = 0, y = FRAME_TOP_OFFSET })
+  else
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  end
   f:Hide()
   T.frame = f
 
