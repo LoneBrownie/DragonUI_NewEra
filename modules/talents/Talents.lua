@@ -581,12 +581,15 @@ local function buildWindow()
     f.trees[i] = tf
   end
 
-  -- Window scale: match the SPELLBOOK's approach — a fixed screen-fraction SetScale (NOT pixel-perfect),
-  -- so this big window reads at the same size as the spellbook. Reuse the spellbook's value so the two
-  -- stay in sync; re-applied on every show (like the spellbook).
+  -- Window scale: its OWN per-window setting via NE.scale (no longer tied to the spellbook). Modes:
+  -- "ui" (follow the UI Scale slider), "none" (pixel-perfect), "custom" (slider). Re-applied on show.
   local function applyWindowScale(fr)
-    local s = (NE.spellbook and NE.spellbook.UI_SCALE) or 0.8
-    if fr and fr.SetScale then fr:SetScale(s) end
+    if NE.scale and NE.scale.Apply then
+      if fr and NE.scale.SetFrame then NE.scale.SetFrame("talents", fr) end
+      NE.scale.Apply("talents")
+    elseif fr and fr.SetScale then
+      fr:SetScale(0.8)
+    end
   end
   guard("windowScale", function() applyWindowScale(f) end)
   f:HookScript("OnShow", function(self) applyWindowScale(self) end)
@@ -661,11 +664,10 @@ local function boot(event)
     return
   end
   if event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
-    -- SetScale is a fixed multiplier on UIParent, so UI-scale changes cascade automatically; just
-    -- re-assert our fraction (matches the spellbook).
-    if T.frame and T.frame.SetScale then
-      local s = (NE.spellbook and NE.spellbook.UI_SCALE) or 0.8
-      guard("rescale", function() T.frame:SetScale(s) end)
+    -- Re-assert the per-window scale (matters for "none"/pixel-perfect which depends on the UI scale).
+    if T.frame then
+      if NE.scale and NE.scale.Apply then guard("rescale", function() NE.scale.Apply("talents") end)
+      elseif T.frame.SetScale then guard("rescale", function() T.frame:SetScale(0.8) end) end
     end
     return
   end

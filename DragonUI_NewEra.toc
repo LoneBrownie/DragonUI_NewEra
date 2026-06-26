@@ -30,6 +30,7 @@ compat\SpellBook.lua
 
 # --- core: downported NewEra Core chrome toolkit (owner: Core/Chrome Engineer) ---
 core\FrameUtil.lua
+core\Scale.lua
 core\Texture.lua
 core\NineSlice.lua
 core\NineSliceLayouts.lua

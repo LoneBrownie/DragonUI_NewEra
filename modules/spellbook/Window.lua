@@ -36,9 +36,14 @@ SB.FRAME_H  = 883
 -- its size like any normal frame) times SB.UI_SCALE as a per-window fine-tune. We deliberately do NOT
 -- lock it to a fixed fraction of the physical screen — that divided out UIParent's scale, so the UI
 -- Scale slider had no effect and the book read as huge. Lower SB.UI_SCALE → smaller book; raise → bigger.
-SB.UI_SCALE = 0.8
+SB.UI_SCALE = 0.8   -- legacy fallback only; the live value lives in NE.scale (per-window setting)
 local function applyWindowScale(f)
-  if f and f.SetScale then f:SetScale(SB.UI_SCALE or 1.0) end
+  if NE.scale and NE.scale.Apply then
+    if f and NE.scale.SetFrame then NE.scale.SetFrame("spellbook", f) end
+    NE.scale.Apply("spellbook")
+  elseif f and f.SetScale then
+    f:SetScale(SB.UI_SCALE or 1.0)
+  end
 end
 SB.ApplyWindowScale = applyWindowScale
 SB.CHROME_L = 0

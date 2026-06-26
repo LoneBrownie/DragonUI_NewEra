@@ -149,6 +149,14 @@ local function buildFrame()
   CP.frame = f
   CP._sidebarExpanded = false
 
+  -- Per-window scaling via NE.scale (mode: ui / none / custom). Default "ui" = no change from the
+  -- previous behaviour (the panel followed the UI scale); re-applied on every show.
+  if NE.scale and NE.scale.Apply then
+    NE.scale.SetFrame("character", f)
+    NE.scale.Apply("character")
+    f:HookScript("OnShow", function() if NE.scale and NE.scale.Apply then NE.scale.Apply("character") end end)
+  end
+
   -- ESC closes it (DOWNPORT: by global name; no SetShown anywhere — Show/Hide only).
   if NE.FrameUtil and NE.FrameUtil.EscClose then
     NE.FrameUtil.EscClose(FRAME_NAME)
