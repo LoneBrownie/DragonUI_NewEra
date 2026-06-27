@@ -94,6 +94,7 @@ modules\talents\Talents.lua
 modules\talents\SpecTabs.lua
 modules\talents\Behavior.lua
 modules\talents\Loadouts.lua
+modules\talents\LoadoutsUI.lua
 
 # --- demo: Sprint-0 proof panel (owner: Core/Chrome Engineer) ---
 core\_HelloDemo.lua

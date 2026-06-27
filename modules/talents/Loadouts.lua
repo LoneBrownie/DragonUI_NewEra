@@ -126,12 +126,12 @@ end
 function T.LO_SetCustomServer(v)
   if NE.db then NE.db.talentCustom = v and true or false end
 end
--- Friendly label shown in the mismatch warning + written into our exports.
+-- Friendly label shown in the mismatch warning + written into our exports. Taken automatically from
+-- the realm (the fingerprint is the real compatibility key; this is only cosmetic for the warning).
 function T.LO_ServerLabel()
-  if NE.db and type(NE.db.talentServerLabel) == "string" and NE.db.talentServerLabel ~= "" then
-    return NE.db.talentServerLabel
-  end
-  return (GetRealmName and GetRealmName()) or "this server"
+  local realm = GetRealmName and GetRealmName()
+  if realm and realm ~= "" then return realm end
+  return "this server"
 end
 
 -- ----------------------------------------------------------------------------
@@ -412,4 +412,72 @@ function T.LO_Rename(oldName, newName)
   db[newName].name = newName
   db[oldName] = nil
   return true
+end
+
+-- Per-tab point summary ("X/Y/Z") for a build, for list rows.
+function T.LO_Summary(build)
+  local struct = buildStruct()
+  local parts = {}
+  for tab = 1, (struct and #struct.tabs or 3) do parts[tab] = tostring(tabSpent(build.ranks, tab)) end
+  return table.concat(parts, "/")
+end
+
+-- ----------------------------------------------------------------------------
+-- Apply a saved build by STAGING it into the live preview (the user then commits via the bottom-bar
+-- Apply button). Only the ACTIVE spec is editable. We can only ADD points (spend available) and
+-- remove still-staged ones — we CANNOT reduce a talent below its already-committed live rank, so any
+-- such talent is reported as a conflict (a respec is required first).
+--
+-- Returns: ok (bool, true when fully stageable), conflicts (list of {name, have, want}), staged (int).
+-- ----------------------------------------------------------------------------
+function T.LO_StageBuild(build)
+  if not (AddPreviewTalentPoints and GetTalentInfo and GetNumTalentTabs and GetNumTalents) then
+    return false, { { name = "preview API unavailable" } }, 0
+  end
+  if InCombatLockdown and InCombatLockdown() then return false, { { name = "in combat" } }, 0 end
+
+  local clean = T.LO_Validate(build) or build.ranks
+  local group = (GetActiveTalentGroup and GetActiveTalentGroup()) or 1
+
+  -- Clear any existing staged preview so we start from the live spec.
+  if T.DiscardPreview then T.DiscardPreview(group) end
+
+  -- Up-front conflict scan: any talent whose target is BELOW its committed live rank can't be done
+  -- without a respec. (We don't stage those; we report them.)
+  local conflicts = {}
+  for tab = 1, (GetNumTalentTabs(false, false) or 0) do
+    for i = 1, (GetNumTalents(tab, false, false) or 0) do
+      local name, _, _, _, liveRank = GetTalentInfo(tab, i, false, false, group)
+      liveRank = liveRank or 0
+      local target = (clean[tab] and clean[tab][i]) or 0
+      if target < liveRank then
+        conflicts[#conflicts + 1] = { name = name or ("tab" .. tab .. ":" .. i), have = liveRank, want = target }
+      end
+    end
+  end
+
+  -- Stage by FIXPOINT: repeatedly add a point to any talent still below its target that the API will
+  -- accept right now. This naturally respects tier/prereq ordering (a point only "takes" once its
+  -- gate is met). previewRank (9th return) reflects the staged rank.
+  local staged, guardN = 0, 0
+  local changed = true
+  while changed and guardN < 300 do
+    changed = false
+    guardN = guardN + 1
+    for tab = 1, (GetNumTalentTabs(false, false) or 0) do
+      for i = 1, (GetNumTalents(tab, false, false) or 0) do
+        local target = (clean[tab] and clean[tab][i]) or 0
+        local _, _, _, _, _, _, _, _, previewRank = GetTalentInfo(tab, i, false, false, group)
+        previewRank = previewRank or 0
+        if previewRank < target then
+          pcall(AddPreviewTalentPoints, tab, i, 1)
+          local _, _, _, _, _, _, _, _, after = GetTalentInfo(tab, i, false, false, group)
+          if (after or 0) > previewRank then changed = true; staged = staged + 1 end
+        end
+      end
+    end
+  end
+
+  if T.Refresh then T.Refresh() end
+  return (#conflicts == 0), conflicts, staged
 end

@@ -128,6 +128,7 @@ local function discardPreview(group)
     end
   end
 end
+T.DiscardPreview = discardPreview   -- exposed for Loadouts (stage-a-saved-build clears preview first)
 
 -- ----------------------------------------------------------------------------
 -- State machine. Map a talentInfo to (state, displayRank).
